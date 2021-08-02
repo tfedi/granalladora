@@ -97,7 +97,8 @@ void dibujarTitulo(unsigned int MAQUINA_INDEX){
 }
 
 void dibujarContador(unsigned int MAQUINA_INDEX){
-  tft.setTextColor(WHITE);
+  if(maquinas[MAQUINA_INDEX].contador.minutos == 0) tft.setTextColor(RED);
+  else tft.setTextColor(WHITE);
   tft.setTextSize(5);
   tft.fillRect(30+desp_x[MAQUINA_INDEX], 120, 240, 40, BLACK);
   tft.setCursor(30+desp_x[MAQUINA_INDEX],120);
@@ -121,11 +122,20 @@ void dibujarBotonMas(unsigned int MAQUINA_INDEX){
 }
 
 void dibujarBotonEmpezarPausar(unsigned int MAQUINA_INDEX){
-  tft.setTextColor(WHITE);
-  tft.setTextSize(empezar_pausar.font_size);
-  tft.fillRect(empezar_pausar.x+desp_x[MAQUINA_INDEX], empezar_pausar.y, empezar_pausar.w, empezar_pausar.h, GREEN);
-  tft.setCursor(empezar_pausar.x+desp_x[MAQUINA_INDEX] + empezar_pausar.pd_left, empezar_pausar.y + empezar_pausar.pd_top);
-  tft.print("> / ||");
+  if(maquinas[MAQUINA_INDEX].estado == EN_USO){
+    tft.setTextColor(BLACK);
+    tft.setTextSize(empezar_pausar.font_size);
+    tft.fillRect(empezar_pausar.x+desp_x[MAQUINA_INDEX], empezar_pausar.y, empezar_pausar.w, empezar_pausar.h, WHITE);
+    tft.setCursor(empezar_pausar.x+desp_x[MAQUINA_INDEX] + empezar_pausar.pd_left - 10, empezar_pausar.y + empezar_pausar.pd_top);
+    tft.print("||");
+  }
+  else{
+    tft.setTextColor(WHITE);
+    tft.setTextSize(empezar_pausar.font_size);
+    tft.fillRect(empezar_pausar.x+desp_x[MAQUINA_INDEX], empezar_pausar.y, empezar_pausar.w, empezar_pausar.h, GREEN);
+    tft.setCursor(empezar_pausar.x+desp_x[MAQUINA_INDEX] + empezar_pausar.pd_left, empezar_pausar.y + empezar_pausar.pd_top);
+    tft.print(">");
+  }
 }
 
 void dibujarBotonDetener(unsigned int MAQUINA_INDEX){
@@ -142,7 +152,6 @@ void mostrarMaquina(unsigned int MAQUINA_INDEX){
   dibujarBotonMenos(MAQUINA_INDEX);
   dibujarBotonMas(MAQUINA_INDEX);
   dibujarBotonEmpezarPausar(MAQUINA_INDEX);
-  dibujarBotonDetener(MAQUINA_INDEX);
 }
 
 String toString(Contador c){
@@ -158,7 +167,7 @@ String toString(Contador c){
 void inicializarBotones(){
   menos = {10, 40, 80, 50, 30, 15, 3};
   mas = {120, 40, 80, 50, 30, 15, 3};
-  empezar_pausar = {10, 180, 200, 50, 30, 10, 4};
+  empezar_pausar = {10, 180, 200, 50, 90, 10, 4};
   detener = {10, 250, 200, 50, 90, 10, 4};
 }
 
@@ -196,7 +205,11 @@ void sumar(unsigned int MAQUINA_INDEX){
 
 void empezarPausar(unsigned int MAQUINA_INDEX){
   if (maquinas[MAQUINA_INDEX].estado == EN_USO) maquinas[MAQUINA_INDEX].estado = PAUSADA;
-  else maquinas[MAQUINA_INDEX].estado = EN_USO;
+  else{
+    maquinas[MAQUINA_INDEX].estado = EN_USO;
+    dibujarBotonDetener(MAQUINA_INDEX);
+  }
+  dibujarBotonEmpezarPausar(MAQUINA_INDEX);
 }
 
 void detenerMaquina(unsigned int MAQUINA_INDEX){
@@ -204,6 +217,7 @@ void detenerMaquina(unsigned int MAQUINA_INDEX){
   maquinas[MAQUINA_INDEX].contador.minutos = CANT_MINUTOS_INICIAL;
   maquinas[MAQUINA_INDEX].contador.segundos = 0;
   dibujarContador(MAQUINA_INDEX);
+  dibujarBotonEmpezarPausar(MAQUINA_INDEX);
 }
 
 void leerTactil(){
