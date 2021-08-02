@@ -5,7 +5,7 @@
 #include "TouchScreen.h"
 
 #define CANT_MAQUINAS 3
-#define CANT_HORAS_INICIAL 4
+#define CANT_MINUTOS_INICIAL 40
 #define ANCHO_CONTADOR 240
 #define ALTO_CONTADOR 40
 #define ANCHO_BOTON 245
@@ -37,7 +37,6 @@
 #define XP 9   // can be a digital pin
 
 struct Contador{
-  unsigned int horas;
   unsigned int minutos;
   unsigned int segundos;
 };
@@ -45,27 +44,17 @@ struct Contador{
 struct Maquina{
   unsigned int pin;
   Contador contador;
-  Timer<> timer;
   bool enUso;
 };
 
 Maquina maquinas[CANT_MAQUINAS];
 MCUFRIEND_kbv tft;
-auto lectura_tactil = timer_create_default();
+Timer<4> tareas;
 TouchScreen ts = TouchScreen(XP, YP, XM, YM, 322);
 int coord_y_contador[3] = {30, 180, 330};
 
-bool restarHora(unsigned int i){
-  if(maquinas[i].contador.horas == 0) return false;
-  maquinas[i].contador.horas--;
-  return true;
-}
-
 bool restarMinuto(unsigned int i){
-  if(maquinas[i].contador.minutos == 0){
-    maquinas[i].contador.minutos = 59;
-    return restarHora(i);
-  }
+  if(maquinas[i].contador.minutos == 0) return false;
   maquinas[i].contador.minutos--;
   return true;
 }
@@ -80,6 +69,7 @@ bool restarSegundo(unsigned int i){
 }
 
 bool actualizar(unsigned int MAQUINA_INDEX){
+  if(!maquinas[MAQUINA_INDEX].enUso) return true;
   bool quedanSegundos = restarSegundo(MAQUINA_INDEX);
   if(!quedanSegundos){
     // Apagar Maquina
@@ -97,14 +87,24 @@ void dibujarContador(unsigned int i){
       tft.print(toString(maquinas[i].contador));
 }
 
-String toString(Contador c){
-  String horas, minutos, segundos;
+void dibujarBotonEmpezar(unsigned int i){
+  tft.setCursor(COORD_X_BOTON + MARGEN_BOTON_X, coord_y_contador[i] + ALTO_CONTADOR + MARGEN_BOTON_Y);
+  tft.fillRect(COORD_X_BOTON, coord_y_contador[i]+ALTO_CONTADOR, ANCHO_BOTON, ALTO_BOTON, GREEN);
+  tft.print("Empezar");
+}
 
-  horas = c.horas < 10 ? "0" + String(c.horas) : String(c.horas);
+void dibujarBotonDetener(unsigned int i){
+  tft.setCursor(COORD_X_BOTON + MARGEN_BOTON_X, coord_y_contador[i] + ALTO_CONTADOR + MARGEN_BOTON_Y);
+  tft.fillRect(COORD_X_BOTON, coord_y_contador[i]+ALTO_CONTADOR, ANCHO_BOTON, ALTO_BOTON, RED);
+  tft.print("Detener");
+}
+String toString(Contador c){
+  String minutos, segundos;
+  
   minutos = c.minutos < 10 ? "0" + String(c.minutos) : String(c.minutos);
   segundos = c.segundos < 10 ? "0" + String(c.segundos) : String(c.segundos);
 
-  return horas + ":" + minutos + ":" + segundos;
+  return minutos + ":" + segundos;
   
 }
 
@@ -114,26 +114,16 @@ void inicializarPantalla(){
   tft.fillScreen(BLACK);
   
   for(int i = 0; i < CANT_MAQUINAS; i++){
-      tft.setTextColor(WHITE);
-      tft.setTextSize(5);
-
-      tft.setCursor(COORD_X_CONTADOR, coord_y_contador[i]);
-      tft.print(toString(maquinas[i].contador));
-
-      tft.setCursor(COORD_X_BOTON + MARGEN_BOTON_X, coord_y_contador[i] + ALTO_CONTADOR + MARGEN_BOTON_Y);
-      tft.fillRect(COORD_X_BOTON, coord_y_contador[i]+ALTO_CONTADOR, ANCHO_BOTON, ALTO_BOTON, GREEN);
-      tft.print("Empezar");
+      dibujarContador(i);
+      dibujarBotonEmpezar(i);
   }
-  lectura_tactil.every(100, leerTactil);
 }
 
 void inicializarMaquinas(){
   for(int i = 0; i < CANT_MAQUINAS; i++){
     maquinas[i].enUso = false;
-    maquinas[i].contador.horas = CANT_HORAS_INICIAL;
-    maquinas[i].contador.minutos = 0;
+    maquinas[i].contador.minutos = CANT_MINUTOS_INICIAL;
     maquinas[i].contador.segundos = 0;
-    maquinas[i].timer.every(1000, actualizar, (void*)i);
   }
 }
 
@@ -156,20 +146,13 @@ void leerTactil(){
       ){
         maquinas[i].enUso = !maquinas[i].enUso;
         if(maquinas[i].enUso){
-          tft.setCursor(COORD_X_BOTON + MARGEN_BOTON_X, coord_y_contador[i] + ALTO_CONTADOR + MARGEN_BOTON_Y);
-          tft.fillRect(COORD_X_BOTON, coord_y_contador[i]+ALTO_CONTADOR, ANCHO_BOTON, ALTO_BOTON, RED);
-          tft.print("Detener");
+          dibujarBotonDetener(i);
         }
         else{
-          maquinas[i].contador.horas = CANT_HORAS_INICIAL;
-          maquinas[i].contador.minutos = 0;
+          dibujarBotonEmpezar(i);
+          maquinas[i].contador.minutos = CANT_MINUTOS_INICIAL;
           maquinas[i].contador.segundos = 0;
-
           dibujarContador(i);
-          
-          tft.setCursor(COORD_X_BOTON + MARGEN_BOTON_X, coord_y_contador[i] + ALTO_CONTADOR + MARGEN_BOTON_Y);
-          tft.fillRect(COORD_X_BOTON, coord_y_contador[i]+ALTO_CONTADOR, ANCHO_BOTON, ALTO_BOTON, GREEN);
-          tft.print("Empezar");
         }
       }
     }
@@ -177,14 +160,16 @@ void leerTactil(){
 }
 
 void setup() {
-  Serial.begin(9600);
   inicializarMaquinas();
   inicializarPantalla();
+
+  for(int i = 0; i < CANT_MAQUINAS; i++){
+    tareas.every(1000, actualizar, i);
+  }
+
+  tareas.every(100, leerTactil);
 }
 
 void loop() {
-  for(int i = 0; i < CANT_MAQUINAS; i++){
-    if(maquinas[i].enUso) maquinas[i].timer.tick();
-  }
-  lectura_tactil.tick();
+  tareas.tick();
 }
