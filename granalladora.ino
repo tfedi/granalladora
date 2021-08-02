@@ -4,16 +4,8 @@
 #include <stdint.h>
 #include "TouchScreen.h"
 
-#define CANT_MAQUINAS 3
+#define CANT_MAQUINAS 2
 #define CANT_MINUTOS_INICIAL 40
-#define ANCHO_CONTADOR 240
-#define ALTO_CONTADOR 40
-#define ANCHO_BOTON 245
-#define ALTO_BOTON 60
-#define COORD_X_CONTADOR 50
-#define COORD_X_BOTON 45
-#define MARGEN_BOTON_X 20
-#define MARGEN_BOTON_Y 10
 
 #define LCD_RESET A4 // Can alternately just connect to Arduino's reset pin
 #define LCD_CS A3   // Chip Select goes to Analog 3
@@ -41,17 +33,34 @@ struct Contador{
   unsigned int segundos;
 };
 
+enum Estado{
+  PAUSADA,
+  DETENIDA,
+  EN_USO
+};
+
+struct Boton{
+  unsigned int x;
+  unsigned int y;
+  unsigned int w;
+  unsigned int h;
+  unsigned int pd_left;
+  unsigned int pd_top;
+  unsigned int font_size;
+};
+
 struct Maquina{
   unsigned int pin;
   Contador contador;
-  bool enUso;
+  Estado estado;
 };
 
 Maquina maquinas[CANT_MAQUINAS];
 MCUFRIEND_kbv tft;
-Timer<4> tareas;
+Timer<CANT_MAQUINAS+1> tareas;
 TouchScreen ts = TouchScreen(XP, YP, XM, YM, 322);
-int coord_y_contador[3] = {30, 180, 330};
+unsigned int desp_x[2] = {0, 250};
+Boton menos, mas, empezar_pausar, detener;
 
 bool restarMinuto(unsigned int i){
   if(maquinas[i].contador.minutos == 0) return false;
@@ -69,35 +78,73 @@ bool restarSegundo(unsigned int i){
 }
 
 bool actualizar(unsigned int MAQUINA_INDEX){
-  if(!maquinas[MAQUINA_INDEX].enUso) return true;
+  if(maquinas[MAQUINA_INDEX].estado != EN_USO) return true;
   bool quedanSegundos = restarSegundo(MAQUINA_INDEX);
   if(!quedanSegundos){
-    // Apagar Maquina
+    maquinas[MAQUINA_INDEX].estado = DETENIDA;
+    maquinas[MAQUINA_INDEX].contador.minutos = CANT_MINUTOS_INICIAL;
+    maquinas[MAQUINA_INDEX].contador.segundos = 0;
   }
   dibujarContador(MAQUINA_INDEX);
   return quedanSegundos;
 }
 
-void dibujarContador(unsigned int i){
-      tft.setTextColor(WHITE);
-      tft.setTextSize(5);
-      
-      tft.fillRect(COORD_X_CONTADOR, coord_y_contador[i], ANCHO_CONTADOR, ALTO_CONTADOR, BLACK);
-      tft.setCursor(COORD_X_CONTADOR,coord_y_contador[i]);
-      tft.print(toString(maquinas[i].contador));
+void dibujarTitulo(unsigned int MAQUINA_INDEX){
+  tft.setTextColor(WHITE);
+  tft.setTextSize(3);
+  tft.setCursor(100+desp_x[MAQUINA_INDEX],10);
+  tft.print(MAQUINA_INDEX+1);
 }
 
-void dibujarBotonEmpezar(unsigned int i){
-  tft.setCursor(COORD_X_BOTON + MARGEN_BOTON_X, coord_y_contador[i] + ALTO_CONTADOR + MARGEN_BOTON_Y);
-  tft.fillRect(COORD_X_BOTON, coord_y_contador[i]+ALTO_CONTADOR, ANCHO_BOTON, ALTO_BOTON, GREEN);
-  tft.print("Empezar");
+void dibujarContador(unsigned int MAQUINA_INDEX){
+  tft.setTextColor(WHITE);
+  tft.setTextSize(5);
+  tft.fillRect(30+desp_x[MAQUINA_INDEX], 120, 240, 40, BLACK);
+  tft.setCursor(30+desp_x[MAQUINA_INDEX],120);
+  tft.print(toString(maquinas[MAQUINA_INDEX].contador));
 }
 
-void dibujarBotonDetener(unsigned int i){
-  tft.setCursor(COORD_X_BOTON + MARGEN_BOTON_X, coord_y_contador[i] + ALTO_CONTADOR + MARGEN_BOTON_Y);
-  tft.fillRect(COORD_X_BOTON, coord_y_contador[i]+ALTO_CONTADOR, ANCHO_BOTON, ALTO_BOTON, RED);
-  tft.print("Detener");
+void dibujarBotonMenos(unsigned int MAQUINA_INDEX){
+  tft.setTextColor(WHITE);
+  tft.setTextSize(menos.font_size);
+  tft.fillRect(menos.x+desp_x[MAQUINA_INDEX], menos.y, menos.w, menos.h, BLUE);
+  tft.setCursor(menos.x+desp_x[MAQUINA_INDEX]+menos.pd_left, menos.y+menos.pd_top);
+  tft.print("-");
 }
+
+void dibujarBotonMas(unsigned int MAQUINA_INDEX){
+  tft.setTextColor(WHITE);
+  tft.setTextSize(mas.font_size);
+  tft.fillRect(mas.x+desp_x[MAQUINA_INDEX], mas.y, mas.w, mas.h, BLUE);
+  tft.setCursor(mas.x+desp_x[MAQUINA_INDEX]+mas.pd_left, mas.y+mas.pd_top);
+  tft.print("+");
+}
+
+void dibujarBotonEmpezarPausar(unsigned int MAQUINA_INDEX){
+  tft.setTextColor(WHITE);
+  tft.setTextSize(empezar_pausar.font_size);
+  tft.fillRect(empezar_pausar.x+desp_x[MAQUINA_INDEX], empezar_pausar.y, empezar_pausar.w, empezar_pausar.h, GREEN);
+  tft.setCursor(empezar_pausar.x+desp_x[MAQUINA_INDEX] + empezar_pausar.pd_left, empezar_pausar.y + empezar_pausar.pd_top);
+  tft.print("> / ||");
+}
+
+void dibujarBotonDetener(unsigned int MAQUINA_INDEX){
+  tft.setTextColor(WHITE);
+  tft.setTextSize(detener.font_size);
+  tft.fillRect(detener.x+desp_x[MAQUINA_INDEX], detener.y, detener.w, detener.h, RED);
+  tft.setCursor(detener.x+desp_x[MAQUINA_INDEX]+detener.pd_left, detener.y+detener.pd_top);
+  tft.print("X");
+}
+
+void mostrarMaquina(unsigned int MAQUINA_INDEX){
+  dibujarTitulo(MAQUINA_INDEX);
+  dibujarContador(MAQUINA_INDEX);
+  dibujarBotonMenos(MAQUINA_INDEX);
+  dibujarBotonMas(MAQUINA_INDEX);
+  dibujarBotonEmpezarPausar(MAQUINA_INDEX);
+  dibujarBotonDetener(MAQUINA_INDEX);
+}
+
 String toString(Contador c){
   String minutos, segundos;
   
@@ -108,23 +155,55 @@ String toString(Contador c){
   
 }
 
+void inicializarBotones(){
+  menos = {10, 40, 80, 50, 30, 15, 3};
+  mas = {120, 40, 80, 50, 30, 15, 3};
+  empezar_pausar = {10, 180, 200, 50, 30, 10, 4};
+  detener = {10, 250, 200, 50, 90, 10, 4};
+}
+
 void inicializarPantalla(){
   tft.reset();
   tft.begin(0x9486);
   tft.fillScreen(BLACK);
-  
-  for(int i = 0; i < CANT_MAQUINAS; i++){
-      dibujarContador(i);
-      dibujarBotonEmpezar(i);
-  }
+  tft.setRotation(1);
+  mostrarMaquina(0);
+  mostrarMaquina(1);
 }
 
 void inicializarMaquinas(){
   for(int i = 0; i < CANT_MAQUINAS; i++){
-    maquinas[i].enUso = false;
+    maquinas[i].estado = DETENIDA;
     maquinas[i].contador.minutos = CANT_MINUTOS_INICIAL;
-    maquinas[i].contador.segundos = 0;
   }
+}
+
+bool enRango(int x1, int y1, int x2, int y2, int w, int h){
+  return x2 <= x1 && x1 <= x2+w && y2 <= y1 && y1 <= y2+h;
+}
+
+void restar(unsigned int MAQUINA_INDEX){
+  if (maquinas[MAQUINA_INDEX].contador.minutos == 5) maquinas[MAQUINA_INDEX].contador.minutos = 1;
+  else maquinas[MAQUINA_INDEX].contador.minutos -= 5;
+  dibujarContador(MAQUINA_INDEX);
+}
+
+void sumar(unsigned int MAQUINA_INDEX){
+  if (maquinas[MAQUINA_INDEX].contador.minutos == 95) maquinas[MAQUINA_INDEX].contador.minutos = 99;
+  else maquinas[MAQUINA_INDEX].contador.minutos += 5;
+  dibujarContador(MAQUINA_INDEX);
+}
+
+void empezarPausar(unsigned int MAQUINA_INDEX){
+  if (maquinas[MAQUINA_INDEX].estado == EN_USO) maquinas[MAQUINA_INDEX].estado = PAUSADA;
+  else maquinas[MAQUINA_INDEX].estado = EN_USO;
+}
+
+void detenerMaquina(unsigned int MAQUINA_INDEX){
+  maquinas[MAQUINA_INDEX].estado = DETENIDA;
+  maquinas[MAQUINA_INDEX].contador.minutos = CANT_MINUTOS_INICIAL;
+  maquinas[MAQUINA_INDEX].contador.segundos = 0;
+  dibujarContador(MAQUINA_INDEX);
 }
 
 void leerTactil(){
@@ -134,32 +213,21 @@ void leerTactil(){
   pinMode(YP, OUTPUT);
   
   if (p.z > ts.pressureThreshhold) {
-    Serial.println(p.y);
-    int Y = map(p.x, 80, 940, 0, tft.height());
-    int X = map(p.y, 140, 800, 0, tft.width());
+    
+    int X = map(p.x, 80, 940, 0, tft.width());
+    int Y = map(p.y, 120, 900, 0, tft.height());
 
     for(int i = 0; i < CANT_MAQUINAS; i++){
-      if(
-        (COORD_X_BOTON <= X && X <= COORD_X_BOTON + ANCHO_BOTON) 
-        && 
-        (coord_y_contador[i]+ALTO_CONTADOR <= Y && Y <= coord_y_contador[i]+ ALTO_CONTADOR + ALTO_BOTON)
-      ){
-        maquinas[i].enUso = !maquinas[i].enUso;
-        if(maquinas[i].enUso){
-          dibujarBotonDetener(i);
-        }
-        else{
-          dibujarBotonEmpezar(i);
-          maquinas[i].contador.minutos = CANT_MINUTOS_INICIAL;
-          maquinas[i].contador.segundos = 0;
-          dibujarContador(i);
-        }
-      }
+      if (enRango(X,Y,menos.x+desp_x[i],menos.y, menos.w, menos.h)) restar(i);
+      if (enRango(X,Y,mas.x+desp_x[i],mas.y, mas.w, mas.h)) sumar(i);
+      if (enRango(X,Y,empezar_pausar.x+desp_x[i],empezar_pausar.y, empezar_pausar.w, empezar_pausar.h)) empezarPausar(i);
+      if (enRango(X,Y,detener.x+desp_x[i],detener.y, detener.w, detener.h)) detenerMaquina(i);
     }
   }
 }
 
 void setup() {
+  inicializarBotones();
   inicializarMaquinas();
   inicializarPantalla();
 
