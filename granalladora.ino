@@ -14,7 +14,7 @@
 #define LCD_RD A0 // LCD Read goes to Analog 0
 
 // Assign human-readable names to some common 16-bit color values:
-#define  BLACK   0x0000
+#define BLACK   0x0000
 #define BLUE    0x001F
 #define RED     0xF800
 #define GREEN   0x07E0
@@ -27,6 +27,9 @@
 #define XM A3  // must be an analog pin, use "An" notation!
 #define YM 8   // can be a digital pin
 #define XP 9   // can be a digital pin
+
+#define PIN_ALARMA 29
+#define INTERVALO_ALARMA 5000
 
 struct Contador{
   unsigned int minutos;
@@ -56,11 +59,20 @@ struct Maquina{
 };
 
 Maquina maquinas[CANT_MAQUINAS];
+int pines_maquinas[3] = {23,25,27};
 MCUFRIEND_kbv tft;
 Timer<CANT_MAQUINAS+1> tareas;
 TouchScreen ts = TouchScreen(XP, YP, XM, YM, 322);
 unsigned int desp_x[2] = {0, 250};
 Boton menos, mas, empezar_pausar, detener;
+
+void sonarAlarma(unsigned int i){
+  for(int cant = 0; cant < 10; cant++){
+    digitalWrite(PIN_ALARMA, LOW);
+    delay(500);
+    digitalWrite(PIN_ALARMA, HIGH);   
+  }
+}
 
 bool restarMinuto(unsigned int i){
   if(maquinas[i].contador.minutos == 0) return false;
@@ -69,24 +81,35 @@ bool restarMinuto(unsigned int i){
 }
 
 bool restarSegundo(unsigned int i){
-  if(maquinas[i].contador.segundos == 0){
+  if(maquinas[i].contador.segundos == 0 && restarMinuto(i)){
     maquinas[i].contador.segundos = 59;
-    return restarMinuto(i);
+    return true;
   }
-  maquinas[i].contador.segundos--;
-  return true;
+  else if (maquinas[i].contador.segundos == 0){
+    return false;
+  }
+  else{
+    maquinas[i].contador.segundos--;
+    return maquinas[i].contador.segundos > 0;  
+  }
 }
 
 bool actualizar(unsigned int MAQUINA_INDEX){
   if(maquinas[MAQUINA_INDEX].estado != EN_USO) return true;
   bool quedanSegundos = restarSegundo(MAQUINA_INDEX);
   if(!quedanSegundos){
+    digitalWrite(pines_maquinas[MAQUINA_INDEX], HIGH);
+    dibujarContador(MAQUINA_INDEX);
+    esconderBotonEmpezarPausar(MAQUINA_INDEX);
+    esconderBotonDetener(MAQUINA_INDEX);
+    sonarAlarma(MAQUINA_INDEX);
     maquinas[MAQUINA_INDEX].estado = DETENIDA;
     maquinas[MAQUINA_INDEX].contador.minutos = CANT_MINUTOS_INICIAL;
     maquinas[MAQUINA_INDEX].contador.segundos = 0;
+    dibujarBotonEmpezarPausar(MAQUINA_INDEX);
   }
   dibujarContador(MAQUINA_INDEX);
-  return quedanSegundos;
+  return true;
 }
 
 void dibujarTitulo(unsigned int MAQUINA_INDEX){
@@ -138,12 +161,20 @@ void dibujarBotonEmpezarPausar(unsigned int MAQUINA_INDEX){
   }
 }
 
+void esconderBotonEmpezarPausar(unsigned int MAQUINA_INDEX){
+  tft.fillRect(empezar_pausar.x+desp_x[MAQUINA_INDEX], empezar_pausar.y, empezar_pausar.w, empezar_pausar.h, BLACK);
+}
+
 void dibujarBotonDetener(unsigned int MAQUINA_INDEX){
   tft.setTextColor(WHITE);
   tft.setTextSize(detener.font_size);
   tft.fillRect(detener.x+desp_x[MAQUINA_INDEX], detener.y, detener.w, detener.h, RED);
   tft.setCursor(detener.x+desp_x[MAQUINA_INDEX]+detener.pd_left, detener.y+detener.pd_top);
   tft.print("X");
+}
+
+void esconderBotonDetener(unsigned int MAQUINA_INDEX){
+  tft.fillRect(detener.x+desp_x[MAQUINA_INDEX], detener.y, detener.w, detener.h, BLACK);
 }
 
 void mostrarMaquina(unsigned int MAQUINA_INDEX){
@@ -161,7 +192,6 @@ String toString(Contador c){
   segundos = c.segundos < 10 ? "0" + String(c.segundos) : String(c.segundos);
 
   return minutos + ":" + segundos;
-  
 }
 
 void inicializarBotones(){
@@ -204,8 +234,12 @@ void sumar(unsigned int MAQUINA_INDEX){
 }
 
 void empezarPausar(unsigned int MAQUINA_INDEX){
-  if (maquinas[MAQUINA_INDEX].estado == EN_USO) maquinas[MAQUINA_INDEX].estado = PAUSADA;
+  if (maquinas[MAQUINA_INDEX].estado == EN_USO){
+    digitalWrite(pines_maquinas[MAQUINA_INDEX], HIGH);
+    maquinas[MAQUINA_INDEX].estado = PAUSADA;
+  }
   else{
+    digitalWrite(pines_maquinas[MAQUINA_INDEX], LOW);
     maquinas[MAQUINA_INDEX].estado = EN_USO;
     dibujarBotonDetener(MAQUINA_INDEX);
   }
@@ -213,11 +247,13 @@ void empezarPausar(unsigned int MAQUINA_INDEX){
 }
 
 void detenerMaquina(unsigned int MAQUINA_INDEX){
+  digitalWrite(pines_maquinas[MAQUINA_INDEX], HIGH);
   maquinas[MAQUINA_INDEX].estado = DETENIDA;
   maquinas[MAQUINA_INDEX].contador.minutos = CANT_MINUTOS_INICIAL;
-  maquinas[MAQUINA_INDEX].contador.segundos = 0;
+  maquinas[MAQUINA_INDEX].contador.segundos = 0; 
   dibujarContador(MAQUINA_INDEX);
   dibujarBotonEmpezarPausar(MAQUINA_INDEX);
+  esconderBotonDetener(MAQUINA_INDEX);
 }
 
 void leerTactil(){
@@ -247,9 +283,13 @@ void setup() {
 
   for(int i = 0; i < CANT_MAQUINAS; i++){
     tareas.every(1000, actualizar, i);
+    pinMode(pines_maquinas[i], OUTPUT);
+    digitalWrite(pines_maquinas[i], HIGH);
   }
 
   tareas.every(100, leerTactil);
+  pinMode(PIN_ALARMA, OUTPUT);
+  digitalWrite(PIN_ALARMA, HIGH);
 }
 
 void loop() {
